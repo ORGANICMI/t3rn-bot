@@ -27,10 +27,13 @@ description = """
 还是继续操你麻痹Rambeboy,偷私钥🐶  V2版本
 """
 
-# 每个链的颜色和符号
+# 每个链的颜色和符号（更新为5条链对应的颜色）
 chain_symbols = {
-    'Arbitrum': '\033[34m',  # 更新为 Arbitrum 链的颜色
-    'OP Sepolia': '\033[91m',         
+    'arb': '\033[34m',      # Arbitrum
+    'op': '\033[91m',       # Optimism / OP Sepolia
+    'base': '\033[92m',     # Base
+    'uni': '\033[93m',      # Uni（例如 Uniswap 或其它）
+    'blast': '\033[95m'     # Blast
 }
 
 # 颜色定义
@@ -38,10 +41,13 @@ green_color = '\033[92m'
 reset_color = '\033[0m'
 menu_color = '\033[95m'  # 菜单文本颜色
 
-# 每个网络的区块浏览器URL
+# 每个网络的区块浏览器URL（此处为示例，后续可根据实际情况修改）
 explorer_urls = {
-    'Arbitrum': 'https://sepolia.arbitrum.io', 
-    'OP Sepolia': 'https://sepolia-optimism.etherscan.io/tx/',
+    'arb': 'https://arb.explorer.url/tx/',       
+    'op': 'https://op.explorer.url/tx/',
+    'base': 'https://base.explorer.url/tx/',
+    'uni': 'https://uni.explorer.url/tx/',
+    'blast': 'https://blast.explorer.url/tx/',
     'b2n': 'https://b2n.explorer.caldera.xyz/tx/'
 }
 
@@ -56,14 +62,14 @@ def check_balance(web3, my_address):
     return web3.from_wei(balance, 'ether')
 
 # 创建和发送交易的函数
-def send_bridge_transaction(web3, account, my_address, data, network_name):
+def send_bridge_transaction(web3, account, my_address, data, network_key):
     nonce = web3.eth.get_transaction_count(my_address, 'pending')
     value_in_ether = 0.101
     value_in_wei = web3.to_wei(value_in_ether, 'ether')
 
     try:
         gas_estimate = web3.eth.estimate_gas({
-            'to': networks[network_name]['contract_address'],
+            'to': networks[network_key]['contract_address'],
             'from': my_address,
             'data': data,
             'value': value_in_wei
@@ -79,12 +85,12 @@ def send_bridge_transaction(web3, account, my_address, data, network_name):
 
     transaction = {
         'nonce': nonce,
-        'to': networks[network_name]['contract_address'],
+        'to': networks[network_key]['contract_address'],
         'value': value_in_wei,
         'gas': gas_limit,
         'maxFeePerGas': max_fee,
         'maxPriorityFeePerGas': priority_fee,
-        'chainId': networks[network_name]['chain_id'],
+        'chainId': networks[network_key]['chain_id'],
         'data': data
     }
 
@@ -103,7 +109,7 @@ def send_bridge_transaction(web3, account, my_address, data, network_name):
         formatted_balance = web3.from_wei(balance, 'ether')
 
         # 获取区块浏览器链接
-        explorer_link = f"{explorer_urls[network_name]}{web3.to_hex(tx_hash)}"
+        explorer_link = f"{explorer_urls[network_key]}{web3.to_hex(tx_hash)}"
 
         # 显示交易信息
         print(f"{green_color}📤 发送地址: {account.address}")
@@ -120,39 +126,35 @@ def send_bridge_transaction(web3, account, my_address, data, network_name):
         return None, None
 
 # 在特定网络上处理交易的函数
-def process_network_transactions(network_name, bridges, chain_data, successful_txs):
+def process_network_transactions(network_key, bridges, chain_data, successful_txs):
     web3 = Web3(Web3.HTTPProvider(chain_data['rpc_url']))
 
     # 如果无法连接，重试直到成功
     while not web3.is_connected():
-        print(f"无法连接到 {network_name}，正在尝试重新连接...")
+        print(f"无法连接到 {networks[network_key]['name']}，正在尝试重新连接...")
         time.sleep(5)  # 等待 5 秒后重试
         web3 = Web3(Web3.HTTPProvider(chain_data['rpc_url']))
     
-    print(f"成功连接到 {network_name}")
+    print(f"成功连接到 {networks[network_key]['name']}")
 
     for bridge in bridges:
         for i, private_key in enumerate(private_keys):
             account = Account.from_key(private_key)
-
-            # 通过私钥生成地址
             my_address = account.address
-
             data = data_bridge.get(bridge)  # 确保 data_bridge 是字典类型
             if not data:
                 print(f"桥接 {bridge} 数据不可用!")
                 continue
 
-            result = send_bridge_transaction(web3, account, my_address, data, network_name)
+            result = send_bridge_transaction(web3, account, my_address, data, network_key)
             if result:
                 tx_hash, value_sent = result
                 successful_txs += 1
 
-                # 检查 value_sent 是否有效再格式化
                 if value_sent is not None:
-                    print(f"{chain_symbols[network_name]}🚀 成功交易总数: {successful_txs} | {labels[i]} | 桥接: {bridge} | 桥接金额: {value_sent:.5f} ETH ✅{reset_color}\n")
+                    print(f"{chain_symbols[network_key]}🚀 成功交易总数: {successful_txs} | {labels[i]} | 桥接: {bridge} | 桥接金额: {value_sent:.5f} ETH ✅{reset_color}\n")
                 else:
-                    print(f"{chain_symbols[network_name]}🚀 成功交易总数: {successful_txs} | {labels[i]} | 桥接: {bridge} ✅{reset_color}\n")
+                    print(f"{chain_symbols[network_key]}🚀 成功交易总数: {successful_txs} | {labels[i]} | 桥接: {bridge} ✅{reset_color}\n")
 
                 print(f"{'='*150}")
                 print("\n")
@@ -160,54 +162,68 @@ def process_network_transactions(network_name, bridges, chain_data, successful_t
             # 随机等待 120 到 180 秒
             wait_time = random.uniform(120, 180)
             print(f"⏳ 等待 {wait_time:.2f} 秒后继续...\n")
-            time.sleep(wait_time)  # 随机延迟时间
+            time.sleep(wait_time)
 
     return successful_txs
 
-# 显示链选择菜单的函数
-def display_menu():
-    print(f"{menu_color}选择要运行交易的链:{reset_color}")
-    print(" ")
-    print(f"{chain_symbols['Arbitrum']}1. Arbitrum -> OP Sepolia{reset_color}")
-    print(f"{chain_symbols['OP Sepolia']}2. OP -> Arbitrum{reset_color}")
-    print(f"{menu_color}3. 运行所有链{reset_color}")
-    print(" ")
-    choice = input("输入选择 (1-3): ")
-    return choice
-
 def main():
+    # 清屏（可选）
+    clear_terminal()
     print("\033[92m" + center_text(description) + "\033[0m")
     print("\n\n")
 
-    successful_txs = 0
-    current_network = 'Arbitrum'  # 默认从 Arbitrum 链开始
-    alternate_network = 'OP Sepolia'
+    # ------------------------------
+    # 在此处增加交互式链选择
+    # ------------------------------
+    chain1 = input("请输入第一条链 (可选: arb, op, base, uni, blast): ").strip().lower()
+    chain2 = input("请输入第二条链 (可选: arb, op, base, uni, blast): ").strip().lower()
 
+    if chain1 not in networks or chain2 not in networks:
+        print("输入的链名称有误，请在 [arb, op, base, uni, blast] 中选择。")
+        sys.exit(1)
+
+    # 显示选择的链配置（每行前有 "    - "）
+    print("    - 源链配置：")
+    print(f"    -   名称: {networks[chain1]['name']}")
+    print(f"    -   RPC: {networks[chain1]['rpc_url']}")
+    print("    - 目标链配置：")
+    print(f"    -   名称: {networks[chain2]['name']}")
+    print(f"    -   RPC: {networks[chain2]['rpc_url']}")
+    print("\n")
+
+    # 将选中的链作为当前跨链的两端
+    current_network = chain1
+    alternate_network = chain2
+
+    successful_txs = 0
+
+    # 循环执行跨链交易
     while True:
-        # 检查当前网络余额是否足够
+        # 检查当前网络余额
         web3 = Web3(Web3.HTTPProvider(networks[current_network]['rpc_url']))
         
         # 如果无法连接，尝试重新连接
         while not web3.is_connected():
-            print(f"无法连接到 {current_network}，正在尝试重新连接...")
-            time.sleep(5)  # 等待 5 秒后重试
+            print(f"无法连接到 {networks[current_network]['name']}，正在尝试重新连接...")
+            time.sleep(5)
             web3 = Web3(Web3.HTTPProvider(networks[current_network]['rpc_url']))
         
-        print(f"成功连接到 {current_network}")
+        print(f"成功连接到 {networks[current_network]['name']}")
         
         my_address = Account.from_key(private_keys[0]).address  # 使用第一个私钥的地址
         balance = check_balance(web3, my_address)
 
-        # 如果余额不足 0.101 ETH，切换到另一个链
+        # 如果余额不足 0.101 ETH，则切换到另一条链
         if balance < 0.101:
-            print(f"{chain_symbols[current_network]}{current_network}余额不足 0.101 ETH，切换到 {alternate_network}{reset_color}")
-            current_network, alternate_network = alternate_network, current_network  # 交换链
+            print(f"{chain_symbols[current_network]}{networks[current_network]['name']} 余额不足 0.101 ETH，切换到 {networks[alternate_network]['name']}{reset_color}")
+            current_network, alternate_network = alternate_network, current_network
 
-        # 处理当前链的交易
-        successful_txs = process_network_transactions(current_network, ["Arbitrum - OP Sepolia"] if current_network == 'Arbitrum' else ["OP - Arbitrum"], networks[current_network], successful_txs)
+        # 构造桥接标签，例如 "ARB -> OP"（这里直接使用键的大写形式）
+        bridge_label = f"{current_network.upper()} -> {alternate_network.upper()}"
+        successful_txs = process_network_transactions(current_network, [bridge_label], networks[current_network], successful_txs)
 
-        # 自动切换网络
-        time.sleep(random.uniform(30, 60))  # 在每次切换网络时增加随机的延时
+        # 自动切换时加入随机延时
+        time.sleep(random.uniform(30, 60))
 
 if __name__ == "__main__":
     main()
